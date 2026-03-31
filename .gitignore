@@ -1,0 +1,28 @@
+# ---------------------------------------------------------------------------------------
+# Velero Disaster Recovery Project: .gitignore
+# ---------------------------------------------------------------------------------------
+
+# 🛡️ Secrets & Credentials (NEVER commit these)
+velero/configs/credentials-velero
+velero/configs/velero-yalues.yaml
+*.pem
+*.key
+credentials
+
+# 📊 Recovery Logs & Reports
+restore/rto-report.log
+*.log
+
+# 🏗️ Infrastructure & Temporary Files
+.terraform/
+terraform.tfstate*
+.aws/
+.kube/
+*.tmp
+tmp/
+
+# 💻 OS Specific Files
+.DS_Store
+Thumbs.db
+[Bb]in/
+[Oo]bj/
