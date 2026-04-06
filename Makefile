@@ -1,35 +1,41 @@
-# 🛡️ Velero Disaster Recovery Automation
+.PHONY: all install-primary install-standby create-buckets enable-crr
+.PHONY: backup-now restore-test status failover-test failover-recover
 
-# Variables
-PRIMARY_REGION="us-east-1"
-STANDBY_REGION="us-west-2"
+install-primary:
+	bash velero/install/velero-install.sh
 
-.PHONY: help foundation backup restore clean
+install-standby:
+	bash velero/install/velero-install-standby.sh
 
-help:
-	@echo "--------------------------------------------------------"
-	@echo "🛡️ Velero Disaster Recovery: Command Center"
-	@echo "--------------------------------------------------------"
-	@echo "foundation  - Setup IAM role and S3 buckets with CRR"
-	@echo "backup      - Install Velero and apply daily schedules (Primary)"
-	@echo "restore     - Run the RTO measurement and restore drill (Standby)"
-	@echo "clean       - Cleanup test namespaces"
-	@echo "--------------------------------------------------------"
+create-buckets:
+	bash s3/create-buckets.sh
 
-foundation:
-	@echo "[Foundation] Running IAM and S3 setup..."
-	bash ./s3/create-buckets.sh
-	bash ./iam/create-iam-role.sh
+enable-crr:
+	bash s3/enable-crr.sh
 
-backup:
-	@echo "[Backup] Installing Velero and scheduling backups..."
-	bash ./velero/install/velero-install.sh
-	kubectl apply -f ./velero/schedules/full-backup-schedule.yaml
+backup-now:
+	velero backup create manual-$(shell date +%Y%m%d%H%M%S) \
+	  --include-namespaces='*' --snapshot-volumes --wait \
+	  --kubeconfig ~/primary-kubeconfig
 
-restore:
-	@echo "[Restore] Monitoring RTO and running restore drill..."
-	bash ./restore/restore-test.sh
+restore-test:
+	bash restore/restore-test.sh
 
-clean:
-	@echo "[Cleanup] Deleting sample-app namespace..."
-	kubectl delete ns sample-app --ignore-not-found
+status:
+	@echo '=== PRIMARY ===' && velero backup get --kubeconfig ~/primary-kubeconfig
+	@echo '=== STANDBY ===' && velero restore get --kubeconfig ~/standby-kubeconfig
+	@echo '=== HEALTH ===' && aws route53 get-health-check-status \
+	  --health-check-id cc41f55e-cabb-470f-8c9b-a6d8d9575b59 \
+	  --query 'HealthCheckObservations[0].StatusReport.Status' --output text
+
+failover-test:
+	aws ec2 stop-instances --region us-east-1 \
+	  --instance-ids i-00f7655e0841cc4df
+	@echo 'Primary stopped. Monitoring Route53...'
+
+failover-recover:
+	aws ec2 start-instances --region us-east-1 \
+	  --instance-ids i-00f7655e0841cc4df
+	@echo 'Primary restarting...'
+
+ 

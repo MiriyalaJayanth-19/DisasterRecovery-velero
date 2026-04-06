@@ -1,26 +1,25 @@
 #!/bin/bash
-# Description: Automated S3 bucket creation and versioning setup for Cross-Region Replication
+set -e
+ACCOUNT_ID='992234856455'
+PRIMARY_BUCKET="velero-backup-primary-${ACCOUNT_ID}"
+REPLICA_BUCKET="velero-backup-replica-${ACCOUNT_ID}"
 
-PRIMARY_BUCKET="velero-backup-primary"
-REPLICA_BUCKET="velero-backup-replica"
+echo '[1/4] Creating primary bucket (us-east-1)...'
+aws s3api create-bucket --bucket ${PRIMARY_BUCKET} --region us-east-1
 
-echo "--------------------------------------------------------"
-echo "Starting S3 Foundation Setup"
-echo "--------------------------------------------------------"
+echo '[2/4] Enabling versioning on primary...'
+aws s3api put-bucket-versioning --bucket ${PRIMARY_BUCKET} \
+  --versioning-configuration Status=Enabled
 
-echo "[1/3] Creating primary bucket in us-east-1..."
-aws s3api create-bucket --bucket $PRIMARY_BUCKET --region us-east-1
+echo '[3/4] Creating replica bucket (us-west-2)...'
+aws s3api create-bucket --bucket ${REPLICA_BUCKET} --region us-west-2 \
+  --create-bucket-configuration LocationConstraint=us-west-2
 
-echo "[2/3] Creating replica bucket in us-west-2..."
-aws s3api create-bucket --bucket $REPLICA_BUCKET \
-    --region us-west-2 \
-    --create-bucket-configuration LocationConstraint=us-west-2
+echo '[4/4] Enabling versioning on replica...'
+aws s3api put-bucket-versioning --bucket ${REPLICA_BUCKET} \
+  --versioning-configuration Status=Enabled
 
-echo "[3/3] Enabling versioning (Required for CRR)..."
-aws s3api put-bucket-versioning --bucket $PRIMARY_BUCKET --versioning-configuration Status=Enabled
-aws s3api put-bucket-versioning --bucket $REPLICA_BUCKET --versioning-configuration Status=Enabled
-
-echo "--------------------------------------------------------"
-echo "Foundation Setup Complete"
-echo "--------------------------------------------------------"
-echo "Next: Configure Cross-Region Replication (CRR)"
+echo 'Verifying...'
+aws s3api get-bucket-versioning --bucket ${PRIMARY_BUCKET}
+aws s3api get-bucket-versioning --bucket ${REPLICA_BUCKET}
+echo 'Done! Both buckets ready with versioning.'

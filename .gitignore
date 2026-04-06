@@ -1,28 +1,26 @@
-# ---------------------------------------------------------------------------------------
-# Velero Disaster Recovery Project: .gitignore
-# ---------------------------------------------------------------------------------------
+# AWS Credentials — NEVER commit
+credentials-velero
+*.csv
 
-# 🛡️ Secrets & Credentials (NEVER commit these)
-velero/configs/credentials-velero
-velero/configs/velero-yalues.yaml
+# SSH Keys
 *.pem
+*.ppk
 *.key
-credentials
 
-# 📊 Recovery Logs & Reports
-restore/rto-report.log
-*.log
+# Kubeconfigs
+primary-kubeconfig
+standby-kubeconfig
+kubeconfig
 
-# 🏗️ Infrastructure & Temporary Files
-.terraform/
-terraform.tfstate*
-.aws/
-.kube/
-*.tmp
-tmp/
+# Environment
+.env
+.env.*
 
-# 💻 OS Specific Files
+# Logs
+rto-report.log
+
+# OS / Editor
 .DS_Store
-Thumbs.db
-[Bb]in/
-[Oo]bj/
+*.swp
+.idea/
+.vscode/

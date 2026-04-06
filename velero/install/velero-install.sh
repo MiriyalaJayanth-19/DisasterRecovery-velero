@@ -1,27 +1,28 @@
 #!/bin/bash
-# ---------------------------------------------------------------------------------------
-# Velero Installation (Primary Cluster - us-east-1)
-# ---------------------------------------------------------------------------------------
+# Velero Install — Primary Cluster (us-east-1)
+set -e
 
-# Prerequisites: 
-# 1. AWS Credentials must be in ../configs/credentials-velero
-# 2. Primary bucket: velero-backup-primary (in us-east-1)
+BUCKET='velero-backup-primary-992234856455'
+REGION='us-east-1'
+KUBECONFIG_FILE=~/primary-kubeconfig
+CREDENTIALS_FILE=~/credentials-velero
+PLUGIN_VERSION='v1.9.0'
 
-echo "Installing Velero on Primary Cluster (us-east-1)..."
+echo '[1/3] Verifying Velero CLI...'
+velero version --client-only
 
+echo '[2/3] Installing Velero on primary cluster...'
 velero install \
   --provider aws \
-  --plugins velero/velero-plugin-for-aws:v1.9.0 \
-  --bucket velero-backup-primary \
-  --backup-location-config region=us-east-1 \
-  --snapshot-location-config region=us-east-1 \
-  --secret-file ./velero/configs/credentials-velero \
+  --plugins velero/velero-plugin-for-aws:${PLUGIN_VERSION} \
+  --bucket ${BUCKET} \
+  --backup-location-config region=${REGION} \
+  --snapshot-location-config region=${REGION} \
+  --secret-file ${CREDENTIALS_FILE} \
   --use-volume-snapshots=true \
-  --use-node-agent \
-  --features=EnableCSI \
-  --wait
+  --kubeconfig ${KUBECONFIG_FILE}
 
-echo "---------------------------------------------------------------------------------------"
-echo "Velero Installation Complete in us-east-1"
-echo "Next: Apply Backup Schedules"
-echo "---------------------------------------------------------------------------------------"
+echo '[3/3] Verifying...'
+kubectl --kubeconfig ${KUBECONFIG_FILE} get pods -n velero
+kubectl --kubeconfig ${KUBECONFIG_FILE} get backupstoragelocation -n velero
+echo 'Done! Velero running on primary.'

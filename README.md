@@ -90,4 +90,4 @@ The core metric for this POC is the **Recovery Time Objective (RTO)**—the time
 
 - **BackupStorageLocation Unavailable**: Verify IAM credentials and S3 network connectivity.
 - **EBS Snapshot Fails**: Ensure `ec2:CreateSnapshot` is present in the IAM policy.
-- **PVC Not Restored**: Ensure the `StorageClass` name on the standby cluster matches the primary cluster exactly.
+- **PVC Not Restored**: Ensure the `StorageClass` name on the standby cluster matches the primary cluster exactly.

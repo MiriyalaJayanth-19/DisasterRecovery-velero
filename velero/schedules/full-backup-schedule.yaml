@@ -1,19 +1,20 @@
 apiVersion: velero.io/v1
 kind: Schedule
 metadata:
-  name: full-backup-daily
+  name: full-cluster-backup
   namespace: velero
 spec:
-  schedule: "0 2 * * *"  # Daily at 02:00 UTC
+  schedule: '0 2 * * *'           # Daily at 02:00 UTC
   template:
-    ttl: 168h0m0s        # 7-day retention (168 hours)
     includedNamespaces:
-    - "*"                # Full cluster backup
-    excludedNamespaces:
-    - kube-system
-    - kube-public
-    - velero
-    snapshotVolumes: true
+    - '*'                           # All namespaces
+    includedResources:
+    - '*'                           # All resource types
+    includeClusterResources: true   # CRDs, ClusterRoles, etc.
     storageLocation: default
     volumeSnapshotLocations:
     - default
+    ttl: 168h0m0s                   # Retain 7 days
+    labels:
+      backup-type: scheduled
+      schedule: full-cluster-backup

@@ -1,44 +1,61 @@
 #!/bin/bash
-# ---------------------------------------------------------------------------------------------------------
-# Disaster Recovery Restore Drill & RTO Measurement
-# Target Region: us-west-2 (Standby)
-# ---------------------------------------------------------------------------------------------------------
+# Velero DR Restore Test + RTO Measurement
+# Cron: 0 4 * * 1  (every Monday 04:00 UTC)
 
-NAMESPACE_TO_RESTORE="sample-app"
-REPLICA_BUCKET="velero-backup-replica"
+KUBECONFIG_STANDBY=~/standby-kubeconfig
+RESTORE_NAMESPACE='test-app'
+LOG_FILE=~/rto-report.log
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
-echo "--------------------------------------------------------"
-echo "Starting DR Restore Drill & RTO Measurement"
-echo "--------------------------------------------------------"
+echo '================================================' | tee -a $LOG_FILE
+echo "DR Restore Test Started: $TIMESTAMP" | tee -a $LOG_FILE
+echo '================================================' | tee -a $LOG_FILE
 
-# 1. Clean Environment
-echo "[Step 1/4] Ensuring clean environment: Deleting $NAMESPACE_TO_RESTORE..."
-kubectl delete ns $NAMESPACE_TO_RESTORE --ignore-not-found --wait
+# Step 1 — Find latest backup
+echo '[1/6] Finding latest backup...' | tee -a $LOG_FILE
+LATEST_BACKUP=$(velero backup get --kubeconfig $KUBECONFIG_STANDBY \
+  -o json 2>/dev/null | jq -r '.metadata.name')
+if [ -z "$LATEST_BACKUP" ] || [ "$LATEST_BACKUP" == 'null' ]; then
+  echo 'No backups found!' | tee -a $LOG_FILE; exit 1
+fi
+echo "Latest backup: $LATEST_BACKUP" | tee -a $LOG_FILE
 
-# 2. Identify Latest Backup
-echo "[Step 2/4] Identifying latest backup in replicated bucket: $REPLICA_BUCKET..."
-LATEST_BACKUP=$(velero backup get --sort-column="created" --reverse | head -n 2 | tail -n 1 | awk '{print $1}')
-echo "Using latest backup: $LATEST_BACKUP"
+# Step 2 — Simulate disaster
+echo "[2/6] Deleting $RESTORE_NAMESPACE on standby..." | tee -a $LOG_FILE
+kubectl --kubeconfig $KUBECONFIG_STANDBY \
+  delete namespace $RESTORE_NAMESPACE --ignore-not-found
+echo 'Namespace deleted' | tee -a $LOG_FILE
 
-# 3. Start Restore & Time
+# Step 3 — Record start time
 START_TIME=$(date +%s)
-echo "[Step 3/4] Triggering Velero restore from backup: $LATEST_BACKUP..."
-velero restore create --from-backup $LATEST_BACKUP --wait
+echo "[3/6] Restore started at $(date '+%H:%M:%S')" | tee -a $LOG_FILE
+echo "RESTORE_START $START_TIME" | tee -a $LOG_FILE
 
-# 4. Measure RTO (Poll for Pods Running)
-echo "[Step 4/4] Measuring RTO (Polling for Pods in $NAMESPACE_TO_RESTORE)..."
-while [[ $(kubectl get pods -n $NAMESPACE_TO_RESTORE -o 'jsonpath={..status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l) -eq 0 ]]; do
-  echo "Still waiting for pods..."
-  sleep 5
+# Step 4 — Trigger restore
+RESTORE_NAME="dr-test-$(date +%Y%m%d%H%M%S)"
+velero restore create $RESTORE_NAME --from-backup $LATEST_BACKUP \
+  --include-namespaces $RESTORE_NAMESPACE --kubeconfig $KUBECONFIG_STANDBY
+
+# Step 5 — Poll until complete
+echo '[5/6] Polling restore status...' | tee -a $LOG_FILE
+while true; do
+  STATUS=$(velero restore get $RESTORE_NAME --kubeconfig $KUBECONFIG_STANDBY \
+    -o json 2>/dev/null | jq -r '.status.phase')
+  echo "  Status: $STATUS" | tee -a $LOG_FILE
+  if [ "$STATUS" == 'Completed' ]; then
+    echo 'Restore completed!' | tee -a $LOG_FILE; break
+  elif [ "$STATUS" == 'Failed' ] || [ "$STATUS" == 'PartiallyFailed' ]; then
+    echo "Restore failed: $STATUS" | tee -a $LOG_FILE; exit 1
+  fi
+  sleep 10
 done
 
+# Step 6 — Calculate RTO
 END_TIME=$(date +%s)
-RTO_SECONDS=$((END_TIME - START_TIME))
-
-echo "--------------------------------------------------------"
-echo "Restore Drill Complete!"
-echo "Recovery Time Objective (RTO): $RTO_SECONDS seconds"
-echo "Result logged to restore/rto-report.log"
-echo "--------------------------------------------------------"
-
-echo "$(date): Backup=$LATEST_BACKUP RTO=$RTO_SECONDS seconds" >> ./restore/rto-report.log
+RTO=$((END_TIME - START_TIME))
+echo "RESTORE_END $END_TIME" | tee -a $LOG_FILE
+kubectl --kubeconfig $KUBECONFIG_STANDBY get pods -n $RESTORE_NAMESPACE | tee -a $LOG_FILE
+echo '================================================' | tee -a $LOG_FILE
+echo "RTO = $RTO seconds ($(( RTO / 60 )) min $(( RTO % 60 )) sec)" | tee -a $LOG_FILE
+echo "Restore: $RESTORE_NAME | $(date '+%Y-%m-%d %H:%M:%S')" | tee -a $LOG_FILE
+echo '================================================' | tee -a $LOG_FILE
